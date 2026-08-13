@@ -1,4 +1,4 @@
-"""Best-of-N vLLM proxy."""
+"""bon-proxy: Best-of-N proxy for vLLM / SGLang."""
 
 from bon_proxy.app import create_app
 from bon_proxy.config import AppConfig, load_config

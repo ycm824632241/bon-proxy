@@ -40,7 +40,7 @@ def create_app(
         finally:
             await service.close()
 
-    app = FastAPI(title="Best-of-N vLLM Proxy", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="bon-proxy", version="0.1.0", lifespan=lifespan)
     app.state.config = config
     app.state.service = service
     app.state.gate = gate
@@ -64,7 +64,7 @@ def create_app(
                     "id": config.answer.model,
                     "object": "model",
                     "created": int(time.time()),
-                    "owned_by": "bon-vllm-proxy",
+                    "owned_by": "bon-proxy",
                 }
             ],
         }

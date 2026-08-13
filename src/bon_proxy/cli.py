@@ -12,7 +12,7 @@ from bon_proxy.config import ConfigLoadError, load_config
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the Best-of-N vLLM proxy")
+    parser = argparse.ArgumentParser(description="Run bon-proxy")
     parser.add_argument("--config", required=True, help="Path to the YAML configuration file")
     return parser
 
