@@ -15,9 +15,24 @@ def test_load_valid_yaml(tmp_path, config_dict) -> None:
     config = load_config(path)
 
     assert config.answer.params.n == 3
-    assert config.judge.params.n == 1
+    assert config.judge.params.n == 4
     assert config.server.log_level == "INFO"
+    assert config.server.log_file is None
+    assert config.server.log_payloads is False
     assert config.answer.base_url == "http://answer.test/v1"
+
+
+def test_log_payloads_derives_jsonl_path(config_dict) -> None:
+    config_dict["server"]["log_file"] = "/tmp/proxy.log"
+    config_dict["server"]["log_payloads"] = True
+    config = AppConfig.model_validate(config_dict)
+    assert config.server.log_payloads_file == "/tmp/proxy.payloads.jsonl"
+
+
+def test_log_payloads_requires_a_path(config_dict) -> None:
+    config_dict["server"]["log_payloads"] = True
+    with pytest.raises(ValueError, match="log_payloads requires"):
+        AppConfig.model_validate(config_dict)
 
 
 @pytest.mark.parametrize(
@@ -26,7 +41,7 @@ def test_load_valid_yaml(tmp_path, config_dict) -> None:
         (("server", "max_concurrency"), 0),
         (("answer", "timeout_seconds"), 0),
         (("answer", "params", "n"), 1),
-        (("judge", "params", "n"), 2),
+        (("judge", "params", "n"), 1),
         (("answer", "params", "top_p"), 0),
         (("answer", "params", "temperature"), 2.1),
     ],

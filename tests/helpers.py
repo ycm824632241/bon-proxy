@@ -43,7 +43,8 @@ def answer_response(choices: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def judge_response(best_index: int) -> dict[str, Any]:
+def judge_response(best_index: int | list[int]) -> dict[str, Any]:
+    indexes = [best_index] * 4 if isinstance(best_index, int) else best_index
     return {
         "id": "chatcmpl-judge",
         "object": "chat.completion",
@@ -51,13 +52,14 @@ def judge_response(best_index: int) -> dict[str, Any]:
         "model": "judge-model",
         "choices": [
             {
-                "index": 0,
+                "index": choice_index,
                 "message": {
                     "role": "assistant",
-                    "content": json.dumps({"best_index": best_index}),
+                    "content": json.dumps({"best_index": selected_index}),
                 },
                 "finish_reason": "stop",
             }
+            for choice_index, selected_index in enumerate(indexes)
         ],
         "usage": {"prompt_tokens": 20, "completion_tokens": 3, "total_tokens": 23},
     }

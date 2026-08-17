@@ -30,6 +30,7 @@ def config_dict() -> dict[str, Any]:
                 "temperature": 1.0,
                 "top_p": 0.95,
                 "n": 3,
+                "reasoning_effort": "max",
                 "chat_template_kwargs": {
                     "thinking": True,
                     "reasoning_effort": "max",
@@ -45,7 +46,8 @@ def config_dict() -> dict[str, Any]:
             "params": {
                 "temperature": 0.1,
                 "top_p": 0.9,
-                "n": 1,
+                "n": 4,
+                "reasoning_effort": "max",
                 "chat_template_kwargs": {"thinking": False},
             },
         },

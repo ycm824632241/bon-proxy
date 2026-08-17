@@ -3,6 +3,9 @@ server:
   port: 8080
   max_concurrency: 32
   log_level: INFO
+  # Optional process log; stderr is always kept
+  # log_file: proxy.log
+  # log_payloads: true
 
 answer:
   base_url: http://answer-vllm:8000/v1
@@ -29,7 +32,7 @@ judge:
   params:
     temperature: 0.1
     top_p: 0.95
-    n: 1
+    n: 4
     chat_template_kwargs:
       thinking: true
       reasoning_effort: max

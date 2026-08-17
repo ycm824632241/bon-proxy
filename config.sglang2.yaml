@@ -33,7 +33,7 @@ judge:
   params:
     temperature: 0.1
     top_p: 0.95
-    n: 1
+    n: 4
     chat_template_kwargs:
       thinking: true
       reasoning_effort: max

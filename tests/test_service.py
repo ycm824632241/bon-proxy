@@ -29,6 +29,7 @@ def test_answer_payload_overrides_controlled_fields_and_preserves_extras(service
         "temperature": 0.2,
         "top_p": 0.2,
         "n": 99,
+        "reasoning_effort": "low",
         "chat_template_kwargs": {"thinking": False},
         "tools": [{"type": "function", "function": {"name": "lookup"}}],
         "response_format": {"type": "json_object"},
@@ -41,6 +42,7 @@ def test_answer_payload_overrides_controlled_fields_and_preserves_extras(service
     assert payload["temperature"] == 1.0
     assert payload["top_p"] == 0.95
     assert payload["n"] == 3
+    assert payload["reasoning_effort"] == "max"
     assert payload["chat_template_kwargs"]["reasoning_effort"] == "max"
     assert payload["stream"] is False
     assert payload["return_token_ids"] is True
@@ -50,14 +52,16 @@ def test_answer_payload_overrides_controlled_fields_and_preserves_extras(service
     assert body["model"] == "client-model"
 
 
-def test_judge_payload_contains_full_choices_without_token_ids(service) -> None:
-    candidates = [
-        Candidate(choice(0, "first", [1, 2]), [1, 2]),
-        Candidate(choice(1, "second", [3, 4, 5]), [3, 4, 5]),
-    ]
+def test_judge_payload_contains_one_input_and_answers_without_reasoning(service) -> None:
+    repeated_prefix = "a long shared conversation prefix"
+    first = choice(0, "first", [1, 2])
+    second = choice(1, "second", [3, 4, 5])
+    first["message"]["reasoning_content"] = "private reasoning one"
+    second["message"]["reasoning_content"] = "private reasoning two"
+    candidates = [Candidate(first, [1, 2]), Candidate(second, [3, 4, 5])]
     request_body = {
         "model": "virtual",
-        "messages": [{"role": "user", "content": "question"}],
+        "messages": [{"role": "user", "content": repeated_prefix}],
         "tools": [{"type": "function", "function": {"name": "lookup"}}],
     }
 
@@ -65,7 +69,8 @@ def test_judge_payload_contains_full_choices_without_token_ids(service) -> None:
 
     assert payload["model"] == "judge-model"
     assert payload["temperature"] == 0.1
-    assert payload["n"] == 1
+    assert payload["n"] == 4
+    assert payload["reasoning_effort"] == "max"
     assert payload["chat_template_kwargs"] == {"thinking": False}
     assert (
         payload["response_format"]["json_schema"]["schema"]["properties"]["best_index"]["maximum"]
@@ -73,9 +78,18 @@ def test_judge_payload_contains_full_choices_without_token_ids(service) -> None:
     )
     judge_text = payload["messages"][1]["content"]
     assert isinstance(judge_text, str)
-    assert '"tools"' in judge_text
-    assert '"content":"second"' in judge_text
+    envelope = json.loads(judge_text.split("\n\n", 1)[1])
+    assert envelope["input"] == request_body
+    assert envelope["answers"] == [
+        {"index": 0, "answer": "first"},
+        {"index": 1, "answer": "second"},
+    ]
+    assert judge_text.count(repeated_prefix) == 1
+    assert "reasoning_content" not in judge_text
+    assert "private reasoning one" not in judge_text
+    assert "private reasoning two" not in judge_text
     assert "token_ids" not in judge_text
+    assert "finish_reason" not in judge_text
 
 
 def test_judge_payload_preserves_media_as_content_parts(service) -> None:
@@ -103,18 +117,32 @@ def test_judge_payload_preserves_media_as_content_parts(service) -> None:
     assert "https://example.test/a.png" not in content[0]["text"]
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        judge_response(1),
-        {
-            "choices": [
-                {"message": {"content": [{"type": "output_text", "text": '{"best_index":1}'}]}}
-            ]
-        },
-    ],
-)
-def test_parse_judge_index(payload) -> None:
+def test_parse_judge_index_votes_across_four_choices() -> None:
+    assert BestOfNService._parse_judge_index(judge_response([1, 1, 0, 1]), 2) == 1
+    assert BestOfNService._parse_judge_votes(judge_response([1, 1, 0, 1]), 2) == [1, 1, 0, 1]
+
+
+def test_parse_judge_index_tie_selects_earlier_candidate() -> None:
+    assert BestOfNService._parse_judge_index(judge_response([1, 0, 1, 0]), 2) == 0
+    assert BestOfNService._parse_judge_index(judge_response([2, 1, 2, 1]), 3) == 1
+
+
+def test_parse_judge_index_accepts_content_parts() -> None:
+    payload = judge_response(1)
+    payload["choices"][0]["message"]["content"] = [
+        {"type": "output_text", "text": '{"best_index":1}'}
+    ]
+
+    assert BestOfNService._parse_judge_index(payload, 2) == 1
+
+
+def test_parse_judge_index_accepts_sglang_reasoning_content() -> None:
+    payload = judge_response([1, 1, 0, 1])
+    for choice_item in payload["choices"]:
+        message = choice_item["message"]
+        message["reasoning_content"] = message["content"]
+        message["content"] = ""
+
     assert BestOfNService._parse_judge_index(payload, 2) == 1
 
 

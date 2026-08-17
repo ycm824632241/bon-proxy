@@ -22,6 +22,12 @@ class ServerConfig(StrictModel):
     port: int = Field(default=8080, ge=1, le=65535)
     max_concurrency: int = Field(default=32, ge=1)
     log_level: str = "INFO"
+    # Optional process log (INFO lines: latency, votes, errors). stderr is always kept.
+    log_file: str | None = None
+    # When true, also append one JSON object per request: messages, N candidates,
+    # judge votes, and the selected answer. Requires log_file or log_payloads_file.
+    log_payloads: bool = False
+    log_payloads_file: str | None = None
 
     @field_validator("host")
     @classmethod
@@ -39,11 +45,32 @@ class ServerConfig(StrictModel):
             raise ValueError("log_level must be CRITICAL, ERROR, WARNING, INFO, or DEBUG")
         return normalized
 
+    @field_validator("log_file", "log_payloads_file")
+    @classmethod
+    def empty_path_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+    @model_validator(mode="after")
+    def resolve_payload_log_path(self) -> Self:
+        if not self.log_payloads:
+            return self
+        if self.log_payloads_file:
+            return self
+        if not self.log_file:
+            raise ValueError("log_payloads requires log_file or log_payloads_file")
+        log_path = Path(self.log_file)
+        self.log_payloads_file = str(log_path.with_name(f"{log_path.stem}.payloads.jsonl"))
+        return self
+
 
 class GenerationParams(StrictModel):
     temperature: float = Field(ge=0, le=2)
     top_p: float = Field(gt=0, le=1)
     n: int = Field(ge=1)
+    reasoning_effort: str | None = None
     chat_template_kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -94,9 +121,9 @@ class JudgeConfig(UpstreamConfig):
         return value
 
     @model_validator(mode="after")
-    def validate_single_judgement(self) -> Self:
-        if self.params.n != 1:
-            raise ValueError("judge.params.n must equal 1")
+    def validate_judgement_count(self) -> Self:
+        if self.params.n != 4:
+            raise ValueError("judge.params.n must equal 4")
         return self
 
 

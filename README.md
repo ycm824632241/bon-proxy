@@ -9,8 +9,10 @@
 | 包名 | `bon-proxy` |
 | Python 模块 | `bon_proxy` |
 | CLI | `bon-proxy` |
-| 版本 | `0.1.0` |
+| 版本 | `2.0.0` |
 | Python | ≥ 3.11 |
+
+当前 `main` 为 2.0。第一版冻结在分支 [`v1`](https://github.com/ycm824632241/bon-proxy/tree/v1)（tag `v1.0.0`）。
 
 ## 请求路径
 
@@ -18,7 +20,7 @@
 客户端 (openai-python)
     → POST /v1/chat/completions
         → answer 上游 /v1/chat/completions  (n=N)
-        → judge 上游 /v1/chat/completions   (n=1, json_schema)
+        → judge 上游 /v1/chat/completions   (n=4, json_schema, 多数投票)
     ← 只返回获胜的那一条
 ```
 
@@ -35,7 +37,8 @@
 - 候选数由 YAML 的 `answer.params.n` 固定（至少 2）。客户端传入的 `n` 被忽略，最终始终返回 1 个 `choice`。
 - YAML 覆盖客户端的：`model`、`temperature`、`top_p`、`n`、`chat_template_kwargs`。其余字段（tools、`response_format`、vLLM / SGLang 扩展等）透传到回答端。
 - 客户端收到的是回答模型返回的原始 choice（`index`、`message`、`finish_reason` 原样保留），judge 文字不会拼进结果。
-- judge 只返回候选索引 `{"best_index": k}`（JSON Schema 强制）。
+- judge 只返回候选索引 `{"best_index": k}`（JSON Schema 强制）；固定采样 4 次并对索引做多数投票，票数相同时取原始候选中更靠前的一个。
+- judge 输入只保留一份共享原始请求和 N 份最终答案，不把 `reasoning_content`、token IDs 送入 judge。
 - judge 失败 / 超时 / 解析失败 → 降级到第 0 个候选；回答模型超时 → 504。
 - `return_token_ids=true`（vLLM）：按获胜 choice 的 token IDs 重算 `completion_tokens`。
 - `return_token_ids=false`（SGLang v0.5.16）：保留上游对全部 N 条的聚合 usage。
@@ -53,6 +56,7 @@
 | `service.py` | BoN 编排：造 payload、抽候选、调 judge、拼最终响应 |
 | `upstream.py` | OpenAI 兼容 `/chat/completions` 的 httpx 客户端 |
 | `config.py` | YAML → Pydantic 严格校验 |
+| `logging_setup.py` / `request_log.py` | 过程日志与可选 JSONL payload 记录 |
 | `concurrency.py` | 无排队并发上限，满了直接 429 |
 | `errors.py` | OpenAI 风格错误体 |
 
@@ -103,6 +107,16 @@ answer:
     top_p: 0.95
     n: 4
     chat_template_kwargs: {}
+```
+
+## 日志
+
+`server.log_file` 把过程日志（时延、`selected`、`votes`、502 等）追加到指定文件，stderr 仍然保留。可用 `--log-file` 覆盖 YAML。
+
+`server.log_payloads: true` 会再写一份 JSONL（默认 `{log_file 去后缀}.payloads.jsonl`），每条请求一行，包含 messages、N 个候选、judge 投票和最终选用。默认 INFO 日志仍不打印 prompt 或 API key。
+
+```bash
+bon-proxy --config config.yaml --log-file /tmp/bon-proxy.log
 ```
 
 ## 客户端调用

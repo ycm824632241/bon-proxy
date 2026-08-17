@@ -121,6 +121,7 @@ async def test_success_calls_answer_and_judge_once_and_returns_best(app_config) 
     assert answer.requests[0]["custom_vllm_field"] == "preserved"
     assert answer.headers[0]["authorization"] == "Bearer answer-secret"
     assert judge.headers[0]["authorization"] == "Bearer judge-secret"
+    assert judge.requests[0]["n"] == 4
     assert response.headers["x-request-id"].startswith("req_")
 
 
